@@ -4,9 +4,13 @@ from monai.transforms import (
     EnsureTyped,
     LoadImaged,
     Orientationd,
+    RandAffined,
     RandFlipd,
+    RandGaussianNoised,
     RandRotate90d,
     RandCropByPosNegLabeld,
+    RandScaleIntensityd,
+    RandShiftIntensityd,
     ScaleIntensityRanged,
     Spacingd,
 )
@@ -23,6 +27,7 @@ def buildTrainTransforms(config: SegmentationConfig) -> Compose:
         cropKeys.append(config.lungMaskKey)
         augmentKeys.append(config.lungMaskKey)
     transforms = _buildCommonTransforms(config=config, keys=keys)
+    affineModes = ["bilinear" if key == config.imageKey else "nearest" for key in augmentKeys]
     transforms.extend(
         [
             RandCropByPosNegLabeld(
@@ -36,10 +41,33 @@ def buildTrainTransforms(config: SegmentationConfig) -> Compose:
                 image_threshold=0.0,
                 allow_smaller=True,
             ),
+            RandAffined(
+                keys=augmentKeys,
+                prob=config.affineAugmentProbability,
+                rotate_range=config.affineRotateRange,
+                scale_range=config.affineScaleRange,
+                mode=affineModes,
+                padding_mode="border",
+            ),
             RandFlipd(keys=augmentKeys, prob=0.5, spatial_axis=0),
             RandFlipd(keys=augmentKeys, prob=0.5, spatial_axis=1),
             RandFlipd(keys=augmentKeys, prob=0.5, spatial_axis=2),
             RandRotate90d(keys=augmentKeys, prob=0.3, max_k=3),
+            RandGaussianNoised(
+                keys=config.imageKey,
+                prob=config.noiseAugmentProbability,
+                std=0.01,
+            ),
+            RandScaleIntensityd(
+                keys=config.imageKey,
+                factors=0.1,
+                prob=config.intensityScaleAugmentProbability,
+            ),
+            RandShiftIntensityd(
+                keys=config.imageKey,
+                offsets=0.1,
+                prob=config.intensityShiftAugmentProbability,
+            ),
         ]
     )
     return Compose(transforms)

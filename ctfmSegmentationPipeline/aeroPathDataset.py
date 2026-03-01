@@ -14,6 +14,18 @@ def buildDataLoaders(
         trainFraction=config.trainFraction,
         randomSeed=config.randomSeed,
     )
+    return buildDataLoadersFromRecords(config=config, trainRecords=trainRecords, valRecords=valRecords)
+
+
+def buildDataLoadersFromRecords(
+    config: SegmentationConfig,
+    trainRecords: list[dict],
+    valRecords: list[dict],
+) -> tuple[DataLoader, DataLoader, list[dict], list[dict]]:
+    if not trainRecords:
+        raise ValueError("trainRecords is empty.")
+    if not valRecords:
+        raise ValueError("valRecords is empty.")
 
     datasetClass = CacheDataset if config.cacheRate > 0.0 else Dataset
     datasetKwargs = {"cache_rate": config.cacheRate} if config.cacheRate > 0.0 else {}

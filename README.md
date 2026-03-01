@@ -34,7 +34,35 @@ python -m ctfmSegmentationPipeline.trainModel --data-root .\data\AeroPath --devi
 Notes:
 - Default `maxEpochs` is `30`.
 - Validation uses full-volume sliding-window inference and can be slow.
-- Training checkpoints are saved on best validation Dice.
+- Training checkpoints are saved on best validation Dice (`bestModel.pt`) and latest epoch (`lastModel.pt`).
+- Validation logs now include:
+  - `valDice`
+  - `valPrecision`
+  - `valRecall`
+  - `valIoU`
+  - `valHd95Vox`
+  - `valAvgSurfaceDistVox`
+
+## Cross-Validation + Holdout
+
+Reserve a holdout subset and run k-fold cross-validation on the remaining development split:
+
+```powershell
+python -m ctfmSegmentationPipeline.crossValidateModel `
+  --data-root .\data\AeroPath `
+  --experiment-name baselineSegResNetCv `
+  --device cuda --amp `
+  --num-folds 5 `
+  --holdout-fraction 0.15 `
+  --max-epochs 20 `
+  --train-batch-size 1 `
+  --patch-size 96 96 96 `
+  --num-workers 2
+```
+
+Summary files are written under:
+- `outputs/ctfmSegmentation/<experiment>_crossVal/splitManifest.json`
+- `outputs/ctfmSegmentation/<experiment>_crossVal/crossValidationSummary.json`
 
 ## Training Outputs
 
@@ -56,6 +84,37 @@ python -m ctfmSegmentationPipeline.runInference `
 
 Inference outputs are written under:
 - `outputs/ctfmSegmentation/inference/<caseId>/`
+
+## Airway-Specific Evaluation
+
+The repository now includes centerline-aware airway metrics:
+- `tlPercent`: tree length captured, i.e. GT centerline voxels inside prediction / full GT centerline length.
+- `clPercent`: centerline leakage, i.e. predicted centerline voxels outside GT / full GT centerline length.
+- `fprPercent`: false-positive voxels outside GT / total GT voxels.
+- `dice`: voxel overlap Dice.
+- `totalTreeLength`: captured GT centerline length scaled by geometric-mean voxel size.
+
+Single-case example:
+
+```powershell
+python -m ctfmSegmentationPipeline.evaluateAirwaySegmentation `
+  --prediction-path .\outputs\ctfmSegmentation\inference\1\airwayMask.nii.gz `
+  --ground-truth-path .\data\AeroPath\1\1_CT_HR_label_airways.nii.gz `
+  --output-json .\outputs\ctfmSegmentation\inference\1\metrics.json
+```
+
+Batch example (all case folders under inference root):
+
+```powershell
+python -m ctfmSegmentationPipeline.evaluateAirwaySegmentation `
+  --prediction-root .\outputs\ctfmSegmentation\inference `
+  --ground-truth-root .\data\AeroPath `
+  --output-json .\outputs\ctfmSegmentation\inference\metrics_summary.json
+```
+
+If you want to remove trachea/main bronchi from both prediction and GT before scoring:
+- single case: use `--exclude-mask-path <path>`
+- batch: use `--exclude-mask-root <root>` and per-case `<caseId>/<exclude-mask-file-name>`
 
 ## Visualize Prediction
 

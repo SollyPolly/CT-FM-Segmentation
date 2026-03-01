@@ -9,7 +9,7 @@ __pycache__/
 # CT-FM Repo / Data / outputs / large artifacts 
 CT-FM/
 data/
-outputs/
+outputs_hpc/
 Papers/
 *.nii
 *.nii.gz
