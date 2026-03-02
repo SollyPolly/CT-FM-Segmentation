@@ -1,0 +1,28 @@
+#!/bin/bash
+#PBS -N ctfmCV
+#PBS -l select=1:ncpus=8:mem=48gb:ngpus=1
+#PBS -l walltime=24:00:00
+#PBS -j oe
+#PBS -o /rds/general/user/dl525/home/CT-FM-Segmentation/cv_train.out
+
+set -euo pipefail
+
+cd /rds/general/user/dl525/home/CT-FM-Segmentation
+
+module load miniforge/3
+eval "$($HOME/miniforge3/bin/conda shell.bash hook)"
+conda activate ctfm
+
+python -m ctfmSegmentationPipeline.crossValidateModel \
+  --data-root ./data/AeroPath \
+  --output-root ./outputs/ctfmSegmentation \
+  --experiment-name baselineSegResNetCv_e20_p96 \
+  --device cuda \
+  --amp \
+  --num-folds 5 \
+  --holdout-fraction 0.15 \
+  --max-epochs 20 \
+  --freeze-encoder-epochs 2 \
+  --train-batch-size 1 \
+  --patch-size 96 96 96 \
+  --num-workers 2

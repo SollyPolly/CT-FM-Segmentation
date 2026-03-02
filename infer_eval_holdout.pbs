@@ -1,0 +1,57 @@
+#!/bin/bash
+#PBS -N ctfmEval
+#PBS -l select=1:ncpus=8:mem=32gb:ngpus=1
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o /rds/general/user/dl525/home/CT-FM-Segmentation/infer_eval.out
+
+set -euo pipefail
+
+cd /rds/general/user/dl525/home/CT-FM-Segmentation
+
+module load miniforge/3
+eval "$($HOME/miniforge3/bin/conda shell.bash hook)"
+conda activate ctfm
+
+EXP=baselineSegResNetCv_e20_p96
+OUT_ROOT=outputs/ctfmSegmentation
+SUMMARY_JSON="$OUT_ROOT/${EXP}_crossVal/crossValidationSummary.json"
+SPLIT_JSON="$OUT_ROOT/${EXP}_crossVal/splitManifest.json"
+
+if [ ! -f "$SUMMARY_JSON" ]; then
+  echo "Missing summary file: $SUMMARY_JSON"
+  exit 1
+fi
+if [ ! -f "$SPLIT_JSON" ]; then
+  echo "Missing split file: $SPLIT_JSON"
+  exit 1
+fi
+
+BEST_FOLD=$(python -c "import json; d=json.load(open('$SUMMARY_JSON')); print(max(d['foldResults'], key=lambda r: r['bestValDice'])['foldIndex'])")
+CKPT="$OUT_ROOT/${EXP}_fold${BEST_FOLD}/bestModel.pt"
+HOLDOUT_IDS=$(python -c "import json; d=json.load(open('$SPLIT_JSON')); print(' '.join(d['holdoutCaseIds']))")
+INFER_ROOT="$OUT_ROOT/${EXP}_holdoutInference"
+
+if [ ! -f "$CKPT" ]; then
+  echo "Missing checkpoint: $CKPT"
+  exit 1
+fi
+
+mkdir -p "$INFER_ROOT"
+echo "Best fold: $BEST_FOLD"
+echo "Checkpoint: $CKPT"
+echo "Holdout IDs: $HOLDOUT_IDS"
+
+for caseId in $HOLDOUT_IDS; do
+  python -m ctfmSegmentationPipeline.runInference \
+    --checkpoint "$CKPT" \
+    --input-path "./data/AeroPath/${caseId}/${caseId}_CT_HR.nii.gz" \
+    --lung-mask-path "./data/AeroPath/${caseId}/${caseId}_CT_HR_label_lungs.nii.gz" \
+    --output-dir "$INFER_ROOT" \
+    --device cuda
+done
+
+python -m ctfmSegmentationPipeline.evaluateAirwaySegmentation \
+  --prediction-root "$INFER_ROOT" \
+  --ground-truth-root ./data/AeroPath \
+  --output-json "$INFER_ROOT/metrics_summary.json"
